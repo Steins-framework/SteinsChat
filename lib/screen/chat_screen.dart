@@ -1,23 +1,28 @@
+import 'dart:convert';
 import 'dart:io';
-
+import 'dart:math';
 import 'package:chat/component/message_clipper.dart';
-import 'package:chat/data/chat_content.dart';
 import 'package:chat/models/message.dart';
+import 'package:chat/models/user.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-class ChatView extends StatefulWidget {
+
+class ChatScreen extends StatefulWidget {
   @override
-  _ChatViewState createState() => _ChatViewState();
+  _ChatScreenState createState() => _ChatScreenState();
 }
 
-class _ChatViewState extends State<ChatView> {
+class _ChatScreenState extends State<ChatScreen> {
 
   TextEditingController messageController = TextEditingController();
   ScrollController chatListController = ScrollController();
   GlobalKey _inputGroupKey = GlobalKey();
+  List<Message> chatHistory = [];
   Socket _socket;
+  User other;
+  User currentUser;
 
   Widget _buildMessageList(BuildContext context){
     return Expanded(
@@ -29,10 +34,10 @@ class _ChatViewState extends State<ChatView> {
           color: Color(0xfff5f5f5),
           child: ListView.builder(
               padding: EdgeInsets.only(bottom: 15),
-              itemCount: messages.length,
+              itemCount: chatHistory.length,
               controller: chatListController,
               itemBuilder: (BuildContext context, int index){
-                return _buildMessage(context, messages[index]);
+                return _buildMessage(context, chatHistory[index]);
               }
           ),
         ),
@@ -77,6 +82,40 @@ class _ChatViewState extends State<ChatView> {
   }
 
   Widget _buildInputGroup(BuildContext context){
+    if (other == null){
+      return Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Color(0xFF7A00EE), Color(0xFFA921CD)
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(25),
+        ),
+        margin: EdgeInsets.only(left: 20.0, right: 20.0, bottom: 10.0),
+        child: SizedBox(
+          width: double.infinity,
+          child: TextButton(
+            style: ButtonStyle(
+              padding: MaterialStateProperty.all(
+                  Platform.isWindows ? EdgeInsets.only(top: 20.0, bottom: 20.0) : EdgeInsets.only(top: 8.0, bottom: 8.0)
+              ),
+            ),
+            child: Text(
+              "Let's chat",
+              style: TextStyle(
+                  color: Colors.white
+              ),
+            ),
+            onPressed: (){
+              goMatching();
+            },
+          ),
+        ),
+      );
+    }
     return Container(
       // color: Color(0xffe0e0e0),
       child: Row(
@@ -100,22 +139,37 @@ class _ChatViewState extends State<ChatView> {
     );
   }
 
+  void goMatching(){
+    int randomId = Random(DateTime.now().millisecondsSinceEpoch).nextInt(1000);
+    setState(() {
+      other = User(
+          id: randomId,
+          name: 'Ricardo'
+      );
+    });
+  }
+
   void sendMessage(BuildContext context){
     if (messageController.text.trim() == ''){
       return ;
     }
-    setState(() {
-      messages.add(Message(
-        sender: currentUser,
-        time: '5:30 PM',
-        text: messageController.text,
-        isLiked: true,
-        unread: true,
-      ));
-    });
-    send(messageController.text);
+    var message = Message(
+      sender: currentUser,
+      time: '5:30 PM',
+      text: messageController.text,
+    );
+
+    send(message);
+
+    addMessageToChatList(message);
 
     messageController.text = '';
+  }
+
+  void addMessageToChatList(Message message){
+    setState(() {
+      chatHistory.add(message);
+    });
 
     var jumpTo = _inputGroupKey.currentContext.size.height + chatListController.position.maxScrollExtent - 2 ;
 
@@ -124,11 +178,39 @@ class _ChatViewState extends State<ChatView> {
 
   void connect() async {
     print("Connect to 10.0.2.2:65535");
-    _socket = await Socket.connect('10.0.2.2', 65535);
+    String address = '10.0.2.2';
+    if (Platform.isWindows){
+      address = '127.0.0.1';
+    }
+
+    _socket = await Socket.connect(address, 65535);
+
+
+    _socket.cast<List<int>>().transform(utf8.decoder).listen((messageString) {
+      if (messageString.trim() == ''){
+        return;
+      }
+      // var messageString = utf8.decode(event);
+      // var messageString = String.fromCharCodes(event);
+      try{
+        var message = Message.fromJson(jsonDecode(messageString.trim()));
+
+        if(message.sender.id != currentUser.id){
+          addMessageToChatList(message);
+        }
+      }catch(e, stack){
+        print(messageString);
+      }
+    }, onError: (e){
+      print(e);
+    });
   }
-  void send(String text) async {
-    print("send: " + text);
-    _socket.writeln(text);
+
+  void send(Message message) async {
+    var messageString = jsonEncode(message);
+    print("send: " + messageString);
+
+    _socket.writeln(messageString);
     await _socket.flush();
   }
 
@@ -137,18 +219,28 @@ class _ChatViewState extends State<ChatView> {
     // TODO: implement initState
     super.initState();
     connect();
+
+    int randomId = Random(DateTime.now().millisecondsSinceEpoch).nextInt(1000);
+
+    currentUser = User(
+        id: randomId,
+        name: 'Ricardo'
+    );
+
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Ricardo'),
+        title: Text(other == null ? "He's gone" : 'Chat with ' + other.name),
         leading: IconButton(
           icon: Icon(Icons.arrow_back_ios),
           iconSize: 15.0,
           color: Colors.white,
-          onPressed: (){},
+          onPressed: (){
+            Navigator.pop(context);
+          },
         ),
         actions: [
           IconButton(icon: Icon(Icons.phone ), onPressed: (){})

@@ -3,11 +3,13 @@ import 'package:json_annotation/json_annotation.dart';
 @JsonSerializable(nullable: false)
 class User {
   final int id;
+  final int sex;
   final String name;
   final String avatar;
 
   User({
     this.id,
+    this.sex,
     this.name,
     this.avatar,
   });
@@ -25,6 +27,7 @@ class User {
 User _$UserFromJson(Map<String, dynamic> json){
   return User(
     id: json['id'],
+    sex: json['sex'],
     name: json['name'],
     avatar: json['avatar'],
   );
@@ -33,6 +36,7 @@ User _$UserFromJson(Map<String, dynamic> json){
 Map<String, dynamic> _$UserToJson(User user){
   return <String, dynamic>{
     'id': user.id,
+    'sex': user.sex,
     'name': user.name,
     'avatar': user.avatar,
   };

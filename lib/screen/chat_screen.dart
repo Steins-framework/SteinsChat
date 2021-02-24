@@ -3,7 +3,9 @@ import 'dart:io';
 import 'dart:math';
 import 'package:chat/component/message_clipper.dart';
 import 'package:chat/models/message.dart';
+import 'package:chat/models/unified_data_format.dart';
 import 'package:chat/models/user.dart';
+import 'package:chat/net/net.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -139,96 +141,6 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  void goMatching(){
-    int randomId = Random(DateTime.now().millisecondsSinceEpoch).nextInt(1000);
-    setState(() {
-      other = User(
-          id: randomId,
-          name: 'Ricardo'
-      );
-    });
-  }
-
-  void sendMessage(BuildContext context){
-    if (messageController.text.trim() == ''){
-      return ;
-    }
-    var message = Message(
-      sender: currentUser,
-      time: '5:30 PM',
-      text: messageController.text,
-    );
-
-    send(message);
-
-    addMessageToChatList(message);
-
-    messageController.text = '';
-  }
-
-  void addMessageToChatList(Message message){
-    setState(() {
-      chatHistory.add(message);
-    });
-
-    var jumpTo = _inputGroupKey.currentContext.size.height + chatListController.position.maxScrollExtent - 2 ;
-
-    chatListController.animateTo(jumpTo, duration: Duration(milliseconds: 500), curve: Curves.ease);
-  }
-
-  void connect() async {
-    print("Connect to 10.0.2.2:65535");
-    String address = '10.0.2.2';
-    if (Platform.isWindows){
-      address = '127.0.0.1';
-    }
-
-    _socket = await Socket.connect(address, 65535);
-
-
-    _socket.cast<List<int>>().transform(utf8.decoder).listen((messageString) {
-      if (messageString.trim() == ''){
-        return;
-      }
-      // var messageString = utf8.decode(event);
-      // var messageString = String.fromCharCodes(event);
-      try{
-        var message = Message.fromJson(jsonDecode(messageString.trim()));
-
-        if(message.sender.id != currentUser.id){
-          addMessageToChatList(message);
-        }
-      }catch(e, stack){
-        print(messageString);
-      }
-    }, onError: (e){
-      print(e);
-    });
-  }
-
-  void send(Message message) async {
-    var messageString = jsonEncode(message);
-    print("send: " + messageString);
-
-    _socket.writeln(messageString);
-    await _socket.flush();
-  }
-
-  @override
-  void initState() {
-    // TODO: implement initState
-    super.initState();
-    connect();
-
-    int randomId = Random(DateTime.now().millisecondsSinceEpoch).nextInt(1000);
-
-    currentUser = User(
-        id: randomId,
-        name: 'Ricardo'
-    );
-
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -266,4 +178,94 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
     );
   }
+
+  @override
+  void initState() {
+    // TODO: implement initState
+    super.initState();
+    registerEvents();
+
+    Future.delayed(Duration.zero,(){
+      registerUser(currentUser);
+    });
+  }
+
+  /// 开始匹配
+  void goMatching(){
+    net.socketWriteObject('matching', null);
+  }
+
+  void sendMessage(BuildContext context){
+    if (messageController.text.trim() == ''){
+      return ;
+    }
+    var message = Message(
+      sender: currentUser,
+      receiver: other,
+      time: '5:30 PM',
+      text: messageController.text,
+    );
+
+    net.socketWriteObject('message', message);
+
+    _addMessageToChatList(message);
+
+    messageController.text = '';
+  }
+
+
+  void registerEvents() async {
+    UnifiedDataFormat.on('message', (dynamic data){
+      var message = Message.fromJson(data);
+
+      _addMessageToChatList(message);
+    });
+
+    UnifiedDataFormat.on('matched', (dynamic data){
+      var message = Message.fromJson(data);
+
+      _addMessageToChatList(message);
+    });
+
+    net.socket.cast<List<int>>().transform(utf8.decoder).listen((response) {
+      if (response.trim() == ''){
+        return;
+      }
+
+      try{
+        var unifiedDataFormat = UnifiedDataFormat.fromJson(jsonDecode(response.trim()));
+
+        unifiedDataFormat.trigger();
+      }catch(e, stack){
+        print(response);
+      }
+    }, onError: (e){
+      print(e);
+    });
+  }
+
+  void registerUser(User user) async {
+    var randomId = Random(DateTime.now().millisecondsSinceEpoch).nextInt(1000);
+    var arguments = ModalRoute.of(context).settings.arguments as Map<String, int>;
+
+    currentUser = User(
+        id: randomId,
+        sex: arguments['sex'],
+        name: 'Ricardo'
+    );
+
+    net.socketWriteObject('register', user);
+  }
+
+
+  void _addMessageToChatList(Message message){
+    setState(() {
+      chatHistory.add(message);
+    });
+
+    var jumpTo = _inputGroupKey.currentContext.size.height + chatListController.position.maxScrollExtent - 2 ;
+
+    chatListController.animateTo(jumpTo, duration: Duration(milliseconds: 500), curve: Curves.ease);
+  }
+
 }

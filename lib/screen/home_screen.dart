@@ -30,10 +30,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   int gender = 4;
 
-  void _jumpToChat(){
-    Navigator.push(context, new MaterialPageRoute(builder: (context){
+  void _jumpToChat(BuildContext context){
+    if (gender == 4){
+      return;
+    }
+
+    Navigator.of(context).push(new MaterialPageRoute(builder: (context){
       return ChatScreen();
-    }));
+    }, settings: RouteSettings(arguments: {
+      'sex': gender
+    })));
   }
 
   void _choiceGender(int gender){
@@ -86,10 +92,10 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
-            image: DecorationImage(
-                image: AssetImage('assets/images/background.jpg'),
-                fit: BoxFit.cover
-            )
+          image: DecorationImage(
+              image: AssetImage('assets/images/background.jpg'),
+              fit: BoxFit.cover
+          ),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -126,7 +132,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 onPressed: (){
-                  _jumpToChat();
+                  _jumpToChat(context);
                 },
               ),
             )

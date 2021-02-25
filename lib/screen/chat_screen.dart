@@ -242,7 +242,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
 
   void registerEvents() async {
-    UnifiedDataFormat.on('message', (dynamic data){
+    Net.on('message', (dynamic data){
       var message = Message.fromJson(data);
 
       if (message.sender.id != currentUser.id){
@@ -250,7 +250,7 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     });
 
-    UnifiedDataFormat.on('matched', (dynamic data){
+    Net.on('matched', (dynamic data){
       var user = User.fromJson(data);
       Navigator.of(context).pop(true);
       setState(() {
@@ -259,28 +259,10 @@ class _ChatScreenState extends State<ChatScreen> {
       });
     });
 
-    UnifiedDataFormat.on('leave', (dynamic data){
+    Net.on('leave', (dynamic data){
       setState(() {
         other = null;
       });
-    });
-
-    Net.socket().cast<List<int>>().transform(utf8.decoder).listen((response) {
-      if (response.trim() == ''){
-        return;
-      }
-
-      print(response);
-
-      try{
-        var unifiedDataFormat = UnifiedDataFormat.fromJson(jsonDecode(response.trim()));
-
-        unifiedDataFormat.trigger();
-      }catch(e, stack){
-        print(response);
-      }
-    }, onError: (e){
-      print(e);
     });
   }
 

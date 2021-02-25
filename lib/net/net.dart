@@ -3,8 +3,8 @@ import 'dart:io';
 
 import 'package:chat/models/unified_data_format.dart';
 
-class net{
-  static Socket socket;
+class Net{
+  static Socket _socket;
 
   static void connect() async {
     String address = '10.0.2.2';
@@ -14,7 +14,7 @@ class net{
     }
     print("Connect to $address:65535");
 
-    socket = await Socket.connect(address, 65535);
+    _socket = await Socket.connect(address, 65535);
   }
 
   static void socketWriteObject(String event,Object object) async{
@@ -22,7 +22,11 @@ class net{
     var requestJson = jsonEncode(requestData);
     print("send: " + requestJson);
 
-    socket.writeln(requestJson);
-    await socket.flush();
+    _socket.writeln(requestJson);
+    await _socket.flush();
+  }
+
+  static Socket socket(){
+    return _socket;
   }
 }

@@ -41,5 +41,6 @@ Map<String, dynamic> _$MessageToJson(Message message){
     'text': message.text,
     'time': message.time,
     'sender': message.sender.toJson(),
+    'receiver': message.receiver.toJson(),
   };
 }

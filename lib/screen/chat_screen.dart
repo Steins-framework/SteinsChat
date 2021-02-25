@@ -22,7 +22,6 @@ class _ChatScreenState extends State<ChatScreen> {
   ScrollController chatListController = ScrollController();
   GlobalKey _inputGroupKey = GlobalKey();
   List<Message> chatHistory = [];
-  Socket _socket;
   User other;
   User currentUser;
 
@@ -143,6 +142,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+
     return Scaffold(
       appBar: AppBar(
         title: Text(other == null ? "He's gone" : 'Chat with ' + other.name),
@@ -151,7 +151,16 @@ class _ChatScreenState extends State<ChatScreen> {
           iconSize: 15.0,
           color: Colors.white,
           onPressed: (){
-            Navigator.pop(context);
+            if (other != null){
+              leave((sure){
+                print(sure);
+                if (sure){
+                  Navigator.of(context).pop();
+                }
+              });
+            }else{
+              Navigator.of(context).pop();
+            }
           },
         ),
         actions: [
@@ -186,13 +195,31 @@ class _ChatScreenState extends State<ChatScreen> {
     registerEvents();
 
     Future.delayed(Duration.zero,(){
-      registerUser(currentUser);
+      registerUser();
     });
   }
 
   /// 开始匹配
   void goMatching(){
-    net.socketWriteObject('matching', null);
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context){
+        return AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              CircularProgressIndicator(),
+              Padding(
+                padding: const EdgeInsets.only(top: 26.0),
+                child: Text("正在加载，请稍后..."),
+              )
+            ],
+          ),
+        );
+      },
+    );
+    Net.socketWriteObject('matching', null);
   }
 
   void sendMessage(BuildContext context){
@@ -206,7 +233,7 @@ class _ChatScreenState extends State<ChatScreen> {
       text: messageController.text,
     );
 
-    net.socketWriteObject('message', message);
+    Net.socketWriteObject('message', message);
 
     _addMessageToChatList(message);
 
@@ -218,19 +245,32 @@ class _ChatScreenState extends State<ChatScreen> {
     UnifiedDataFormat.on('message', (dynamic data){
       var message = Message.fromJson(data);
 
-      _addMessageToChatList(message);
+      if (message.sender.id != currentUser.id){
+        _addMessageToChatList(message);
+      }
     });
 
     UnifiedDataFormat.on('matched', (dynamic data){
-      var message = Message.fromJson(data);
-
-      _addMessageToChatList(message);
+      var user = User.fromJson(data);
+      Navigator.of(context).pop(true);
+      setState(() {
+        other = user;
+        chatHistory.clear();
+      });
     });
 
-    net.socket.cast<List<int>>().transform(utf8.decoder).listen((response) {
+    UnifiedDataFormat.on('leave', (dynamic data){
+      setState(() {
+        other = null;
+      });
+    });
+
+    Net.socket().cast<List<int>>().transform(utf8.decoder).listen((response) {
       if (response.trim() == ''){
         return;
       }
+
+      print(response);
 
       try{
         var unifiedDataFormat = UnifiedDataFormat.fromJson(jsonDecode(response.trim()));
@@ -244,7 +284,39 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  void registerUser(User user) async {
+  void leave(Function(bool) func) async {
+    showDialog(context: context, builder: (context){
+      return AlertDialog(
+        title: Text('You sure to leave?'),
+        content: Text(''),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+
+              func(false);
+            },
+            child: Text('CANCEL', style: TextStyle(color: Color(0xFF6200EE)),),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+
+              Net.socketWriteObject('leave', null);
+              setState(() {
+                other = null;
+              });
+
+              func(true);
+            },
+            child: Text('CONFIRM', style: TextStyle(color: Color(0xFF6200EE)),),
+          ),
+        ],
+      );
+    });
+  }
+
+  void registerUser() async {
     var randomId = Random(DateTime.now().millisecondsSinceEpoch).nextInt(1000);
     var arguments = ModalRoute.of(context).settings.arguments as Map<String, int>;
 
@@ -254,7 +326,7 @@ class _ChatScreenState extends State<ChatScreen> {
         name: 'Ricardo'
     );
 
-    net.socketWriteObject('register', user);
+    Net.socketWriteObject('register', currentUser);
   }
 
 

@@ -1,13 +1,13 @@
+import 'dart:io';
+
 import 'package:chat/net/net.dart';
-import 'package:chat/screen/chat_screen.dart';
 import 'package:chat/screen/home_screen.dart';
 import 'package:flutter/material.dart';
-import 'global/localDB.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
-  net.connect();
+  Net.connect();
 
   runApp(MyApp());
 }

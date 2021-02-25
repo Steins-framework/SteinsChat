@@ -5,7 +5,7 @@ class UnifiedDataFormat {
   final String event;
   final dynamic data;
 
-  static Map<String, Function(dynamic)> _events;
+  static final Map<String, void Function(dynamic)> _events = {};
 
   UnifiedDataFormat({
     this.event,
@@ -20,7 +20,7 @@ class UnifiedDataFormat {
     return _$UnifiedDataFormatToJson(this);
   }
 
-  static void on(String event, Function(dynamic) func){
+  static void on(String event, void Function(dynamic) func){
      _events[event] = func;
   }
 

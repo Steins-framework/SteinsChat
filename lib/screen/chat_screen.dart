@@ -1,9 +1,7 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'package:chat/component/message_clipper.dart';
 import 'package:chat/models/message.dart';
-import 'package:chat/models/unified_data_format.dart';
 import 'package:chat/models/user.dart';
 import 'package:chat/net/net.dart';
 import 'package:flutter/cupertino.dart';

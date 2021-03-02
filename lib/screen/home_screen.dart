@@ -24,6 +24,8 @@ class _HomeScreenState extends State<HomeScreen> {
     0,      0,      0,      1, 0,
   ]);
 
+  final TextEditingController nameController = TextEditingController();
+
 
   static const int MAN = 0;
   static const int FEMALE = 1;

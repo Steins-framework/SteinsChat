@@ -2,7 +2,7 @@ import 'dart:async';
 
 var jsonDecoder = JsonDecoder();
 
-class JsonDecoder<S, T> implements StreamTransformer<String, dynamic> {
+class JsonDecoder<S,string> implements StreamTransformerBase<String, String>{
 
   StreamController _controller;
 
@@ -10,19 +10,19 @@ class JsonDecoder<S, T> implements StreamTransformer<String, dynamic> {
 
   bool cancelOnError;
 
+  bool _sync = false;
+
   // Original Stream
   Stream<String> _stream;
 
   JsonDecoder({bool sync: false, this.cancelOnError}) {
-    _controller = new StreamController<T>(onListen: _onListen, onCancel: _onCancel, onPause: () {
-      _subscription.pause();
-    }, onResume: () {
-      _subscription.resume();
-    }, sync: sync);
+    _sync = sync;
+
+    _reload();
   }
 
-  JsonDecoder.broadcast({bool sync: false, this.cancelOnError}) {
-    _controller = new StreamController<T>.broadcast(onListen: _onListen, onCancel: _onCancel, sync: sync);
+  void _reload(){
+    _controller = new StreamController<String>.broadcast(onListen: _onListen, onCancel: _onCancel, sync: _sync);
   }
 
   void _onListen() {
@@ -43,13 +43,19 @@ class JsonDecoder<S, T> implements StreamTransformer<String, dynamic> {
 
   /// Transformation
   void onData(String data) {
-    print('onData:' + data);
+    // print('onData:' + data);
 
     _buffer += data;
 
     /**
      * 这段代码有名字的，我把他叫做对生活的妥协。爷的青春，今天被两个反括号结束了
      */
+
+    if (_buffer.startsWith('{') && _buffer.endsWith('}') && ! _buffer.contains('}{')){
+      _controller.add(_buffer);
+      _buffer = '';
+      return;
+    }
 
     if (! _buffer.contains('}{')) {
       return;
@@ -59,15 +65,16 @@ class JsonDecoder<S, T> implements StreamTransformer<String, dynamic> {
 
     for (int i = 0; i < json.length; i++) {
       if (i == 0) {
-        _controller.add(json[i] + '}');
+        _controller.add(json[i] += '}');
         continue;
       }
 
       if (i == json.length - 1) {
         if (json[i].endsWith('}')) {
           _controller.add('{' + json[i]);
+          _buffer = '';
         } else {
-          _buffer += json.last;
+          _buffer = '{' + json.last;
         }
         break;
       }
@@ -160,7 +167,9 @@ class JsonDecoder<S, T> implements StreamTransformer<String, dynamic> {
 
 
   /// Bind
-  Stream<T> bind(Stream<String> stream) {
+  Stream<String> bind(Stream<String> stream) {
+    _reload();
+
     this._stream = stream;
     return _controller.stream;
   }

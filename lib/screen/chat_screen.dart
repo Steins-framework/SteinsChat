@@ -1,5 +1,5 @@
+import 'dart:async';
 import 'dart:io';
-import 'dart:math';
 import 'package:chat/component/message_clipper.dart';
 import 'package:chat/models/message.dart';
 import 'package:chat/models/user.dart';
@@ -7,6 +7,7 @@ import 'package:chat/net/net.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:uuid/uuid.dart';
 
 
 class ChatScreen extends StatefulWidget {
@@ -20,8 +21,10 @@ class _ChatScreenState extends State<ChatScreen> {
   ScrollController chatListController = ScrollController();
   GlobalKey _inputGroupKey = GlobalKey();
   List<Message> chatHistory = [];
-  User other;
+  Timer messageStatusTimer;
+  String chatStatus;
   User currentUser;
+  User other;
 
   Widget _buildMessageList(BuildContext context){
     return Expanded(
@@ -47,7 +50,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _buildMessage(BuildContext context, Message message, ){
     var isMe = message.sender.id == currentUser.id;
 
-    return Column(
+    var column = Column(
       crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
       children: [
         Padding(
@@ -68,7 +71,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ) : null,
               child: Text(
-                message.text,
+                message.text + message.status.toString(),
                 style: TextStyle(
                     color: isMe ? Colors.white : Colors.black
                 ),
@@ -78,6 +81,12 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
       ],
     );
+
+    if(message.status == 2){
+      column.children.add(Icon(Icons.error_outline));
+    }
+
+    return column;
   }
 
   Widget _buildInputGroup(BuildContext context){
@@ -120,9 +129,12 @@ class _ChatScreenState extends State<ChatScreen> {
       child: Row(
         key: _inputGroupKey,
         children: [
-          IconButton(icon: Icon(Icons.more_horiz), onPressed: (){
-
-          }),
+          TextButton(
+            child: Text(chatStatus == 'chat' ? '离开' : '确认？', style: TextStyle(color: Colors.grey),),
+            onPressed: (){
+              leave((x){});
+            },
+          ),
           Expanded(child: TextField(
             controller: messageController,
             textInputAction: TextInputAction.send,
@@ -143,7 +155,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(other == null ? "He's gone" : 'Chat with ' + other.name),
+        // title: Text(other == null ? "He's gone" : 'Chat with ' + other.name),
+        title: Text(other == null ? "He's gone" : 'Start chat'),
         leading: IconButton(
           icon: Icon(Icons.arrow_back_ios),
           iconSize: 15.0,
@@ -199,9 +212,32 @@ class _ChatScreenState extends State<ChatScreen> {
 
   /// 开始匹配
   void goMatching(){
+    if (currentUser == null){
+      registerUser();
+    }
+
+    if (Net.socket() == null){
+      showDialog(
+        context: context,
+        builder: (context){
+          return AlertDialog(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                CircularProgressIndicator(),
+                Padding(
+                  padding: const EdgeInsets.only(top: 26.0),
+                  child: Text("连接服务器失败"),
+                )
+              ],
+            ),
+          );
+        },
+      );
+    }
     showDialog(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: Platform.isWindows,
       builder: (context){
         return AlertDialog(
           content: Column(
@@ -210,13 +246,16 @@ class _ChatScreenState extends State<ChatScreen> {
               CircularProgressIndicator(),
               Padding(
                 padding: const EdgeInsets.only(top: 26.0),
-                child: Text("正在加载，请稍后..."),
+                child: Text("正在匹配，请稍后..."),
               )
             ],
           ),
         );
       },
     );
+
+    this.chatStatus = 'matching';
+
     Net.socketWriteObject('matching', null);
   }
 
@@ -229,6 +268,7 @@ class _ChatScreenState extends State<ChatScreen> {
       receiver: other,
       time: '5:30 PM',
       text: messageController.text,
+      key: Uuid().v4()
     );
 
     Net.socketWriteObject('message', message);
@@ -250,17 +290,52 @@ class _ChatScreenState extends State<ChatScreen> {
 
     Net.on('matched', (dynamic data){
       var user = User.fromJson(data);
-      Navigator.of(context).pop(true);
+      if (this.chatStatus == 'matching'){
+        Navigator.of(context).pop(true);
+      }
+      this.chatStatus = 'chat';
       setState(() {
         other = user;
         chatHistory.clear();
       });
+
+      messageStatusTimer = Timer.periodic(Duration(seconds: 10), (timer) {
+        print("hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh");
+        if (chatHistory.isEmpty){
+          return;
+        }
+        bool change = false;
+        for (var i = 0; i < chatHistory.length; i++){
+          if (chatHistory[i].sender.id != currentUser.id){
+            continue;
+          }
+          if (chatHistory[i].status == 0){
+            change = true;
+            chatHistory[i].status = 2;
+          }
+        }
+
+        if(change){
+          setState(() {
+
+          });
+        }
+      });
+
     });
 
     Net.on('leave', (dynamic data){
+      this.chatStatus = 'chat';
+      this.messageStatusTimer?.cancel();
       setState(() {
         other = null;
       });
+    });
+
+    Net.on('_disconnect', (dynamic data) {
+      if (this.chatStatus == 'matching'){
+        Navigator.of(context).pop(true);
+      }
     });
   }
 
@@ -274,7 +349,9 @@ class _ChatScreenState extends State<ChatScreen> {
             onPressed: () {
               Navigator.of(context).pop();
 
-              func(false);
+              if(func != null){
+                func(false);
+              }
             },
             child: Text('CANCEL', style: TextStyle(color: Color(0xFF6200EE)),),
           ),
@@ -282,12 +359,15 @@ class _ChatScreenState extends State<ChatScreen> {
             onPressed: () {
               Navigator.of(context).pop();
 
+              messageStatusTimer?.cancel();
               Net.socketWriteObject('leave', null);
               setState(() {
                 other = null;
               });
 
-              func(true);
+              if(func != null){
+                func(false);
+              }
             },
             child: Text('CONFIRM', style: TextStyle(color: Color(0xFF6200EE)),),
           ),
@@ -297,13 +377,13 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void registerUser() async {
-    var randomId = Random(DateTime.now().millisecondsSinceEpoch).nextInt(1000);
+    var id = Uuid();
     var arguments = ModalRoute.of(context).settings.arguments as Map<String, int>;
 
     currentUser = User(
-        id: randomId,
+        id: id.v4(),
         sex: arguments['sex'],
-        name: 'Ricardo'
+        name: id.v4()
     );
 
     Net.socketWriteObject('register', currentUser);

@@ -16,61 +16,39 @@ class Net {
   static Stream _broadcastStream;
   static StreamSubscription _stream;
 
-  static const Port = 65535;
+  static const Port = 9966;
 
   static void boot() async {
     _socket = await connect();
 
-    // if(_broadcastStream == null) {
-      _broadcastStream =
-          _socket.cast<List<int>>()
-              .transform(utf8.decoder)
-              .transform(jsonDecoder)
-              .asBroadcastStream();
-    // }
+    _broadcastStream =
+        _socket.cast<List<int>>()
+            .transform(utf8.decoder)
+            .transform(jsonDecoder)
+            .asBroadcastStream();
+
     _stream = _broadcastStream.listen((response) {
-      print(222222222);
-      print(response);
+      if(! response.contains('pong')){
+        print(response);
+      }
+
+      try{
+        var format = UnifiedDataFormat.fromJson(jsonDecode(response));
+
+        trigger(format.event, format.data);
+      }catch(e){
+        print(response);
+      }
     }, onError: (e) async {
       print(e);
+      trigger('_disconnect', null);
       _socket.close();
       _stream.cancel();
       boot();
     });
 
-    // _broadcastStream.listen((response) {
-    //   print(1111111);
-    //   print(response);
-    // }, onError: (e) async {
-    //   print(e);
-    //   _socket.close();
-    //   boot();
-    // });
-
-
   }
-  // static void boot() async {
-  //   _socket = await connect();
-  //
-  //    _broadcastStream = _socket.cast<List<int>>().transform(utf8.decoder).transform(jsonDecoder).asBroadcastStream();
-  //
-  //   _broadcastStream.listen((response) {
-  //     // print(response);
-  //     // try{
-  //     //   var format = UnifiedDataFormat.fromJson(jsonDecode(response));
-  //     //
-  //     //   trigger(format.event, format.data);
-  //     // }catch(e){
-  //     //   print(response);
-  //     // }
-  //   }, onError: (e) async {
-  //     print(e);
-  //     _socket.close();
-  //     _socket.destroy();
-  //     _socket = null;
-  //     boot();
-  //   });
-  // }
+
 
   static Future<Socket> connect() async {
     String address = '10.0.2.2';
@@ -78,7 +56,10 @@ class Net {
     if (Platform.isWindows){
       address = '127.0.0.1';
     }
-    print("Connect to $address:65535");
+
+    // address = 'chat.misakas.com';
+
+    print("Connect to $address:$Port");
 
     return await Socket.connect(address, Port);
   }
@@ -88,7 +69,13 @@ class Net {
     var requestJson = jsonEncode(requestData);
     print("send: " + requestJson);
 
-    _socket.writeln(requestJson);
+    try{
+      _socket.writeln(requestJson);
+    }catch(e){
+      print(e);
+      boot();
+      return;
+    }
     await _socket.flush();
   }
 

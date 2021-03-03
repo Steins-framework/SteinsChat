@@ -21,7 +21,7 @@ class UnifiedDataFormat {
   }
 
   static void on(String event, void Function(dynamic) func){
-     _events[event] = func;
+    _events[event] = func;
   }
 
   void trigger(){
@@ -39,8 +39,14 @@ UnifiedDataFormat _$UnifiedDataFormatFromJson(Map<String, dynamic> json){
 }
 
 Map<String, dynamic> _$UnifiedDataFormatToJson(UnifiedDataFormat format){
+  var a = 1;
+
   return <String, dynamic>{
     'event': format.event,
-    'data': format.data != null ? format.data.toJson() : null,
+    'data': format.data != null ?
+    format.data is String || format.data is num
+        ? format.data
+        : format.data.toJson()
+        : null,
   };
 }

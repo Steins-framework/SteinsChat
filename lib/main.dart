@@ -12,9 +12,13 @@ void main() {
 
 class MyApp extends StatelessWidget {
   // This widget is the root of your application.
+  final navigatorKey = GlobalKey<NavigatorState>();
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
+
       title: 'Flutter Demo',
       theme: ThemeData(
         primarySwatch: Colors.blue,
@@ -22,5 +26,24 @@ class MyApp extends StatelessWidget {
       ),
       home: HomeScreen(),
     );
+  }
+
+  MyApp(){
+    registerGlobalEvent();
+  }
+
+  void registerGlobalEvent(){
+    Net.on('_disconnect', (dynamic) {
+      final snackBar = SnackBar(
+        content: Text('Wow...好像与服务器断开了连接'),
+        action: SnackBarAction(
+          label: '行吧',
+          onPressed: () {
+            // Some code to undo the change.
+          },
+        ),
+      );
+      ScaffoldMessenger.of(navigatorKey.currentState.overlay.context).showSnackBar(snackBar);
+    });
   }
 }

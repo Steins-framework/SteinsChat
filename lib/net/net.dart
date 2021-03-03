@@ -13,22 +13,44 @@ class Net {
 
   static var _events = new Map<String, List<SocketEventCallback>>();
 
+  static String status;
+  
+  static int heartbeat = 5;
+  static int _lastHeartbeatTime;
+  static Timer heartbeatTask;
+
   static Stream _broadcastStream;
-  static StreamSubscription _stream;
 
   static const Port = 9966;
 
   static void boot() async {
-    _socket = await connect();
+    await connect().then((value) {
+      print("Connect successfully");
+      _socket = value;
+      status = 'connect';
 
+      trigger('_connect', null);
+      _startHeartbeat();
+
+      on('heartbeat', (dynamic) {
+        _lastHeartbeatTime = DateTime.now().millisecondsSinceEpoch;
+      });
+    }).onError((error, stackTrace) {
+      boot();
+      return;
+    });
+
+    if (_socket == null || status != 'connect'){
+      return;
+    }
     _broadcastStream =
         _socket.cast<List<int>>()
             .transform(utf8.decoder)
             .transform(jsonDecoder)
             .asBroadcastStream();
 
-    _stream = _broadcastStream.listen((response) {
-      if(! response.contains('pong')){
+    _broadcastStream.listen((response) {
+      if(! response.contains('heartbeat')){
         print(response);
       }
 
@@ -40,13 +62,23 @@ class Net {
         print(response);
       }
     }, onError: (e) async {
-      print(e);
-      trigger('_disconnect', null);
-      _socket.close();
-      _stream.cancel();
-      boot();
+      reboot();
     });
 
+  }
+
+  static void reboot() async {
+    if (status == 'rebooting'){
+      return;
+    }
+    status = 'rebooting';
+    trigger('_disconnect', null);
+    try{
+      _socket?.close();
+    }catch(e){
+      // todo::正确处理socket关闭
+    }
+    boot();
   }
 
 
@@ -57,26 +89,28 @@ class Net {
       address = '127.0.0.1';
     }
 
-    // address = 'chat.misakas.com';
+    address = 'chat.misakas.com';
 
     print("Connect to $address:$Port");
 
-    return await Socket.connect(address, Port);
+    return await Socket.connect(address, Port,timeout: Duration(seconds: 5));
   }
 
   static void socketWriteObject(String event,Object object) async{
     var requestData = UnifiedDataFormat(event: event, data: object);
     var requestJson = jsonEncode(requestData);
-    print("send: " + requestJson);
+
+    if(event != 'heartbeat'){
+      print("send: " + requestJson);
+    }
 
     try{
-      _socket.writeln(requestJson);
+      _socket.write(requestJson);
+      await _socket.flush();
     }catch(e){
-      print(e);
-      boot();
-      return;
+      reboot();
+      // throw e;
     }
-    await _socket.flush();
   }
 
   static Socket socket(){
@@ -100,5 +134,22 @@ class Net {
     for (var i = list.length - 1; i > -1; --i) {
       list[i](data);
     }
+  }
+
+  static void _startHeartbeat(){
+    heartbeatTask?.cancel();
+    _lastHeartbeatTime = DateTime.now().millisecondsSinceEpoch;
+
+    heartbeatTask = Timer.periodic(Duration(seconds: heartbeat), (timer) {
+      if(status == 'disconnect'){
+        timer.cancel();
+        return;
+      }
+      if (DateTime.now().millisecondsSinceEpoch - _lastHeartbeatTime > heartbeat * 2000){
+        reboot();
+        return;
+      }
+      socketWriteObject('heartbeat', '（<ゝω・）Kira☆~');
+    });
   }
 }

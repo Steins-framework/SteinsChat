@@ -34,7 +34,7 @@ class JsonDecoder<S,string> implements StreamTransformerBase<String, String>{
   }
 
   void _onCancel() {
-    _subscription.cancel();
+    _subscription?.cancel();
     _subscription = null;
   }
 

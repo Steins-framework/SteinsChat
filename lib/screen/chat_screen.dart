@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:chat/component/message_clipper.dart';
 import 'package:chat/models/message.dart';
 import 'package:chat/models/user.dart';
 import 'package:chat/net/net.dart';
@@ -8,18 +7,20 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
+import 'package:vibration/vibration.dart';
 
 
-class ChatScreen extends StatefulWidget {
+class ChatScreen extends StatefulWidget{
   @override
   _ChatScreenState createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   TextEditingController messageController = TextEditingController();
   ScrollController chatListController = ScrollController();
   GlobalKey _inputGroupKey = GlobalKey();
+  AppLifecycleState appLifecycleState;
   List<Message> chatHistory = [];
   Timer messageStatusTimer;
   String chatStatus;
@@ -48,45 +49,36 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildMessage(BuildContext context, Message message, ){
+    const edge = EdgeInsets.all(10.0);
     var isMe = message.sender.id == currentUser.id;
 
-    var column = Column(
+    return Column(
       crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: isMe ? const EdgeInsets.fromLTRB(40.0, 10.0, 10.0,0) : const EdgeInsets.fromLTRB(10, 10, 40, 0),
-          child: ClipPath(
-            clipper: MessageClipper(),
-            child: Container(
-              padding: const EdgeInsets.all(10.0),
-              color: isMe? null: Color(0xffebecf1),
-              decoration: isMe ? BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Color(0xFF7A00EE),
-                    Color(0xFFA921CD),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ) : null,
-              child: Text(
-                message.text + message.status.toString(),
-                style: TextStyle(
-                    color: isMe ? Colors.white : Colors.black
-                ),
-              ),
+        Container(
+          padding: edge,
+          margin: isMe ? const EdgeInsets.fromLTRB(40.0, 10.0, 10.0,0) : const EdgeInsets.fromLTRB(10, 10, 40, 0),
+          decoration: BoxDecoration(
+            color: isMe? null: Color(0xffebecf1),
+            gradient: isMe ? LinearGradient(
+              colors: [
+                Color(0xFF7A00EE),
+                Color(0xFFA921CD),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ) : null,
+            borderRadius: BorderRadius.circular(10.0),
+          ),
+          child: Text(
+            message.text,
+            style: TextStyle(
+                color: isMe ? Colors.white : Colors.black
             ),
           ),
         ),
       ],
     );
-
-    if(message.status == 2){
-      column.children.add(Icon(Icons.error_outline));
-    }
-
-    return column;
   }
 
   Widget _buildInputGroup(BuildContext context){
@@ -132,7 +124,7 @@ class _ChatScreenState extends State<ChatScreen> {
           TextButton(
             child: Text(chatStatus == 'chat' ? '离开' : '确认？', style: TextStyle(color: Colors.grey),),
             onPressed: (){
-              leave((x){});
+              leave();
             },
           ),
           Expanded(child: TextField(
@@ -204,13 +196,19 @@ class _ChatScreenState extends State<ChatScreen> {
     // TODO: implement initState
     super.initState();
     registerEvents();
+    WidgetsBinding.instance.addObserver(this);
 
     Future.delayed(Duration.zero,(){
       registerUser();
     });
   }
 
-  /// 开始匹配
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
   void goMatching(){
     if (currentUser == null){
       registerUser();
@@ -264,11 +262,11 @@ class _ChatScreenState extends State<ChatScreen> {
       return ;
     }
     var message = Message(
-      sender: currentUser,
-      receiver: other,
-      time: '5:30 PM',
-      text: messageController.text,
-      key: Uuid().v4()
+        sender: currentUser,
+        receiver: other,
+        time: '5:30 PM',
+        text: messageController.text,
+        key: Uuid().v4()
     );
 
     Net.socketWriteObject('message', message);
@@ -278,8 +276,17 @@ class _ChatScreenState extends State<ChatScreen> {
     messageController.text = '';
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // TODO: implement didChangeAppLifecycleState
+    appLifecycleState = state;
+  }
 
   void registerEvents() async {
+    Net.on('_connect', (dynamic) {
+      registerUser();
+    });
+
     Net.on('message', (dynamic data){
       var message = Message.fromJson(data);
 
@@ -288,39 +295,44 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     });
 
-    Net.on('matched', (dynamic data){
+    Net.on('matched', (dynamic data) async {
       var user = User.fromJson(data);
+
+      if (await Vibration.hasVibrator()) {
+        Vibration.vibrate(duration:400);
+      }
+
       if (this.chatStatus == 'matching'){
         Navigator.of(context).pop(true);
       }
+
       this.chatStatus = 'chat';
       setState(() {
         other = user;
         chatHistory.clear();
       });
 
-      messageStatusTimer = Timer.periodic(Duration(seconds: 10), (timer) {
-        print("hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh");
-        if (chatHistory.isEmpty){
-          return;
-        }
-        bool change = false;
-        for (var i = 0; i < chatHistory.length; i++){
-          if (chatHistory[i].sender.id != currentUser.id){
-            continue;
-          }
-          if (chatHistory[i].status == 0){
-            change = true;
-            chatHistory[i].status = 2;
-          }
-        }
-
-        if(change){
-          setState(() {
-
-          });
-        }
-      });
+      // messageStatusTimer = Timer.periodic(Duration(seconds: 10), (timer) {
+      //   if (chatHistory.isEmpty){
+      //     return;
+      //   }
+      //   bool change = false;
+      //   for (var i = 0; i < chatHistory.length; i++){
+      //     if (chatHistory[i].sender.id != currentUser.id){
+      //       continue;
+      //     }
+      //     if (chatHistory[i].status == 0){
+      //       change = true;
+      //       chatHistory[i].status = 2;
+      //     }
+      //   }
+      //
+      //   if(change){
+      //     setState(() {
+      //
+      //     });
+      //   }
+      // });
 
     });
 
@@ -339,7 +351,7 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  void leave(Function(bool) func) async {
+  void leave([Function(bool) func]) async {
     showDialog(context: context, builder: (context){
       return AlertDialog(
         title: Text('You sure to leave?'),
@@ -366,7 +378,7 @@ class _ChatScreenState extends State<ChatScreen> {
               });
 
               if(func != null){
-                func(false);
+                func(true);
               }
             },
             child: Text('CONFIRM', style: TextStyle(color: Color(0xFF6200EE)),),
@@ -380,15 +392,15 @@ class _ChatScreenState extends State<ChatScreen> {
     var id = Uuid();
     var arguments = ModalRoute.of(context).settings.arguments as Map<String, int>;
 
-    currentUser = User(
-        id: id.v4(),
-        sex: arguments['sex'],
-        name: id.v4()
-    );
-
+    if(currentUser == null){
+      currentUser = User(
+          id: id.v4(),
+          sex: arguments['sex'],
+          name: id.v4()
+      );
+    }
     Net.socketWriteObject('register', currentUser);
   }
-
 
   void _addMessageToChatList(Message message){
     setState(() {

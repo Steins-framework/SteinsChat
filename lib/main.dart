@@ -1,3 +1,4 @@
+import 'package:chat/common/notification_bar.dart';
 import 'package:chat/net/net.dart';
 import 'package:chat/screen/home_screen.dart';
 import 'package:flutter/material.dart';
@@ -6,6 +7,8 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
   Net.boot();
+
+  notificationBar.init();
 
   runApp(MyApp());
 }

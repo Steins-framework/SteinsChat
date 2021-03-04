@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:chat/common/notification_bar.dart';
 import 'package:chat/models/message.dart';
 import 'package:chat/models/user.dart';
 import 'package:chat/net/net.dart';
@@ -20,7 +21,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   TextEditingController messageController = TextEditingController();
   ScrollController chatListController = ScrollController();
   GlobalKey _inputGroupKey = GlobalKey();
-  AppLifecycleState appLifecycleState;
+  AppLifecycleState appLifecycleState = AppLifecycleState.resumed;
   List<Message> chatHistory = [];
   Timer messageStatusTimer;
   String chatStatus;
@@ -145,48 +146,59 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
 
-    return Scaffold(
-      appBar: AppBar(
-        // title: Text(other == null ? "He's gone" : 'Chat with ' + other.name),
-        title: Text(other == null ? "He's gone" : 'Start chat'),
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios),
-          iconSize: 15.0,
-          color: Colors.white,
-          onPressed: (){
-            if (other != null){
-              leave((sure){
-                print(sure);
-                if (sure){
-                  Navigator.of(context).pop();
-                }
-              });
-            }else{
+    return WillPopScope(
+      onWillPop: () async {
+        if (chatStatus == 'chat'){
+          leave((confirm){
+            if(confirm){
               Navigator.of(context).pop();
             }
-          },
-        ),
-        actions: [
-          IconButton(icon: Icon(Icons.phone ), onPressed: (){})
-        ],
-        flexibleSpace: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                Color(0xFF7A00EE),
-                Color(0xFFA921CD),
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+          });
+        }
+        return chatStatus != 'chat';
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          // title: Text(other == null ? "He's gone" : 'Chat with ' + other.name),
+          title: Text(other == null ? "对方离开了" : '开始聊天'),
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back_ios),
+            iconSize: 15.0,
+            color: Colors.white,
+            onPressed: (){
+              if (other != null){
+                leave((confirm){
+                  if (confirm){
+                    Navigator.of(context).pop();
+                  }
+                });
+              }else{
+                Navigator.of(context).pop();
+              }
+            },
+          ),
+          actions: [
+            IconButton(icon: Icon(Icons.phone ), onPressed: (){})
+          ],
+          flexibleSpace: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Color(0xFF7A00EE),
+                  Color(0xFFA921CD),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
             ),
           ),
         ),
-      ),
-      body: Column(
-        children: [
-          _buildMessageList(context),
-          _buildInputGroup(context)
-        ],
+        body: Column(
+          children: [
+            _buildMessageList(context),
+            _buildInputGroup(context)
+          ],
+        ),
       ),
     );
   }
@@ -214,25 +226,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       registerUser();
     }
 
-    if (Net.socket() == null){
-      showDialog(
-        context: context,
-        builder: (context){
-          return AlertDialog(
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                CircularProgressIndicator(),
-                Padding(
-                  padding: const EdgeInsets.only(top: 26.0),
-                  child: Text("连接服务器失败"),
-                )
-              ],
-            ),
-          );
-        },
-      );
-    }
     showDialog(
       context: context,
       barrierDismissible: Platform.isWindows,
@@ -244,7 +237,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               CircularProgressIndicator(),
               Padding(
                 padding: const EdgeInsets.only(top: 26.0),
-                child: Text("正在匹配，请稍后..."),
+                child: Text("正在匹配..."),
               )
             ],
           ),
@@ -292,6 +285,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
       if (message.sender.id != currentUser.id){
         _addMessageToChatList(message);
+
+        if(appLifecycleState == AppLifecycleState.paused){
+          notificationBar.show(1, '收到了一条新信息', message.text);
+        }
       }
     });
 
@@ -307,41 +304,25 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       }
 
       this.chatStatus = 'chat';
-      setState(() {
-        other = user;
-        chatHistory.clear();
-      });
-
-      // messageStatusTimer = Timer.periodic(Duration(seconds: 10), (timer) {
-      //   if (chatHistory.isEmpty){
-      //     return;
-      //   }
-      //   bool change = false;
-      //   for (var i = 0; i < chatHistory.length; i++){
-      //     if (chatHistory[i].sender.id != currentUser.id){
-      //       continue;
-      //     }
-      //     if (chatHistory[i].status == 0){
-      //       change = true;
-      //       chatHistory[i].status = 2;
-      //     }
-      //   }
-      //
-      //   if(change){
-      //     setState(() {
-      //
-      //     });
-      //   }
-      // });
-
+      if(mounted){
+        setState(() {
+          other = user;
+          chatHistory.clear();
+        });
+      }
     });
 
     Net.on('leave', (dynamic data){
-      this.chatStatus = 'chat';
+      if(this.chatStatus != 'chat'){
+        return;
+      }
+      this.chatStatus = 'wait';
       this.messageStatusTimer?.cancel();
-      setState(() {
-        other = null;
-      });
+      if(mounted){
+        setState(() {
+          other = null;
+        });
+      }
     });
 
     Net.on('_disconnect', (dynamic data) {
@@ -354,7 +335,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   void leave([Function(bool) func]) async {
     showDialog(context: context, builder: (context){
       return AlertDialog(
-        title: Text('You sure to leave?'),
+        title: Text('确认离开吗?'),
         content: Text(''),
         actions: [
           TextButton(
@@ -365,7 +346,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 func(false);
               }
             },
-            child: Text('CANCEL', style: TextStyle(color: Color(0xFF6200EE)),),
+            child: Text('取消', style: TextStyle(color: Color(0xFF6200EE)),),
           ),
           TextButton(
             onPressed: () {
@@ -381,7 +362,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 func(true);
               }
             },
-            child: Text('CONFIRM', style: TextStyle(color: Color(0xFF6200EE)),),
+            child: Text('确认', style: TextStyle(color: Color(0xFF6200EE)),),
           ),
         ],
       );

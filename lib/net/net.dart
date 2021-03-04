@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:chat/models/unified_data_format.dart';
 import 'package:chat/net/json_decoder.dart';
+import 'package:flutter/material.dart';
 
 typedef void SocketEventCallback(dynamic);
 
@@ -24,6 +25,7 @@ class Net {
   static const Port = 9966;
 
   static void boot() async {
+    // print(StackTrace.current);
     await connect().then((value) {
       print("Connect successfully");
       _socket = value;
@@ -54,13 +56,14 @@ class Net {
         print(response);
       }
 
+      UnifiedDataFormat format;
       try{
-        var format = UnifiedDataFormat.fromJson(jsonDecode(response));
-
-        trigger(format.event, format.data);
+        format = UnifiedDataFormat.fromJson(jsonDecode(response));
       }catch(e){
         print(response);
+        return;
       }
+      trigger(format.event, format.data);
     }, onError: (e) async {
       reboot();
     });
@@ -80,7 +83,6 @@ class Net {
     }
     boot();
   }
-
 
   static Future<Socket> connect() async {
     String address = '10.0.2.2';

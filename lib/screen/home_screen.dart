@@ -45,7 +45,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _choiceGender(int gender){
-    print(gender);
     setState(() {
       this.gender = gender;
     });

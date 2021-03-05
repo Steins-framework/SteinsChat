@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:chat/models/unified_data_format.dart';
 import 'package:chat/net/json_decoder.dart';
+import 'package:device_info/device_info.dart';
 import 'package:flutter/material.dart';
 
 typedef void SocketEventCallback(dynamic);
@@ -90,8 +91,16 @@ class Net {
     if (Platform.isWindows){
       address = '127.0.0.1';
     }
+    var device = DeviceInfoPlugin();
 
-    address = 'chat.misakas.com';
+    var info = await device.androidInfo;
+
+    if(info.model == 'sdk_gphone_x86_arm'){
+      address = '10.0.2.2';
+    }else{
+      address = '192.168.3.117';
+    }
+    // address = 'chat.misakas.com';
 
     print("Connect to $address:$Port");
 

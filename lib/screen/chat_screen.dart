@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:chat/common/notification_bar.dart';
+import 'package:chat/component/bubble.dart';
 import 'package:chat/models/message.dart';
+import 'package:chat/models/single_room.dart';
 import 'package:chat/models/user.dart';
 import 'package:chat/net/net.dart';
 import 'package:flutter/cupertino.dart';
@@ -24,9 +26,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   AppLifecycleState appLifecycleState = AppLifecycleState.resumed;
   List<Message> chatHistory = [];
   Timer messageStatusTimer;
+  int maximumMessageDelay = 10; // In seconds
   String chatStatus;
   User currentUser;
-  User other;
+  SingleRoom room;
 
   Widget _buildMessageList(BuildContext context){
     return Expanded(
@@ -41,7 +44,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               itemCount: chatHistory.length,
               controller: chatListController,
               itemBuilder: (BuildContext context, int index){
-                return _buildMessage(context, chatHistory[index]);
+                // return _buildMessage(context, chatHistory[index]);
+                return Bubble(
+                  message: chatHistory[index],
+                  isSelf: chatHistory[index].sender.id == currentUser.id,
+                );
               }
           ),
         ),
@@ -49,41 +56,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildMessage(BuildContext context, Message message, ){
-    const edge = EdgeInsets.all(10.0);
-    var isMe = message.sender.id == currentUser.id;
-
-    return Column(
-      crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: edge,
-          margin: isMe ? const EdgeInsets.fromLTRB(40.0, 10.0, 10.0,0) : const EdgeInsets.fromLTRB(10, 10, 40, 0),
-          decoration: BoxDecoration(
-            color: isMe? null: Color(0xffebecf1),
-            gradient: isMe ? LinearGradient(
-              colors: [
-                Color(0xFF7A00EE),
-                Color(0xFFA921CD),
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ) : null,
-            borderRadius: BorderRadius.circular(10.0),
-          ),
-          child: Text(
-            message.text,
-            style: TextStyle(
-                color: isMe ? Colors.white : Colors.black
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildInputGroup(BuildContext context){
-    if (other == null){
+    if (this.room == null){
       return Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -160,13 +134,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       child: Scaffold(
         appBar: AppBar(
           // title: Text(other == null ? "He's gone" : 'Chat with ' + other.name),
-          title: Text(other == null ? "对方离开了" : '开始聊天'),
+          title: Text(this.room == null ? "对方离开了" : '开始聊天'),
           leading: IconButton(
             icon: Icon(Icons.arrow_back_ios),
             iconSize: 15.0,
             color: Colors.white,
             onPressed: (){
-              if (other != null){
+              if (this.room != null){
                 leave((confirm){
                   if (confirm){
                     Navigator.of(context).pop();
@@ -256,8 +230,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
     var message = Message(
         sender: currentUser,
-        receiver: other,
-        time: '5:30 PM',
+        receiver: room.other(),
+        time: DateTime.now().millisecondsSinceEpoch,
         text: messageController.text,
         key: Uuid().v4()
     );
@@ -271,7 +245,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // TODO: implement didChangeAppLifecycleState
     appLifecycleState = state;
   }
 
@@ -289,15 +262,31 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         if(appLifecycleState == AppLifecycleState.paused){
           notificationBar.show(1, '收到了一条新信息', message.text);
         }
+        // Net.socketWriteObject('read', message);
+      }else{
+        for(int i = chatHistory.length - 1; i > -1; i--){
+          var m = chatHistory[i];
+          if(m.key == message.key){
+            setState(() {    // TODO: implement didChangeAppLifecycleState
+
+              m.status = 1;
+            });
+            return;
+          }
+        }
       }
     });
 
     Net.on('matched', (dynamic data) async {
-      var user = User.fromJson(data);
+      var room = SingleRoom.fromJson(data);
+
+      room.of(currentUser);
 
       if (await Vibration.hasVibrator()) {
-        Vibration.vibrate(duration:400);
+        Vibration.vibrate(duration:300);
       }
+
+      startMessageStatusTimer();
 
       if (this.chatStatus == 'matching'){
         Navigator.of(context).pop(true);
@@ -306,7 +295,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       this.chatStatus = 'chat';
       if(mounted){
         setState(() {
-          other = user;
+          this.room = room;
           chatHistory.clear();
         });
       }
@@ -320,7 +309,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       this.messageStatusTimer?.cancel();
       if(mounted){
         setState(() {
-          other = null;
+          this.room = null;
         });
       }
     });
@@ -355,7 +344,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               messageStatusTimer?.cancel();
               Net.socketWriteObject('leave', null);
               setState(() {
-                other = null;
+                this.room = null;
               });
 
               if(func != null){
@@ -384,13 +373,45 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   void _addMessageToChatList(Message message){
-    setState(() {
-      chatHistory.add(message);
-    });
+    print(StackTrace.current);
+    if(mounted){
+      setState(() {
+        chatHistory.add(message);
+      });
+    }
 
     var jumpTo = _inputGroupKey.currentContext.size.height + chatListController.position.maxScrollExtent - 2 ;
 
     chatListController.animateTo(jumpTo, duration: Duration(milliseconds: 500), curve: Curves.ease);
+  }
+
+  void startMessageStatusTimer(){
+    messageStatusTimer = Timer.periodic(Duration(seconds: maximumMessageDelay), (timer) {
+      if (chatStatus != 'chat'){
+        messageStatusTimer?.cancel();
+        return;
+      }
+
+      int unixTime = DateTime.now().millisecondsSinceEpoch;
+      bool changed = false;
+
+      for(int i = chatHistory.length - 1; i > -1; i--){
+        var message = chatHistory[i];
+        if(message.sender.id != currentUser.id){
+          return;
+        }
+        if (message.status == 0 && unixTime - message.time > maximumMessageDelay * 1000){
+          message.status = 3;
+          changed = true;
+        }
+      }
+
+      if(changed){
+        setState(() {
+          //
+        });
+      }
+    });
   }
 
 }

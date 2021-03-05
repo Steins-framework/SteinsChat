@@ -50,37 +50,31 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  Decoration _buildDecoration(){
-    return BoxDecoration(
-      gradient: LinearGradient(
-        colors: [
-          Color(0xFF7A00EE),
-          Color(0xFF8B30F1),
-          Color(0xFFBE20E7),
-        ],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ),
-    );
-  }
-
   Widget _genderPicker(int gender, ImageProvider image){
-    return ClipOval(
-      child: Container(
-        // color: this.gender == gender ? Colors.amberAccent : null,
-        decoration: this.gender == gender ? _buildDecoration() : null,
-        padding: EdgeInsets.all(10.0),
-        child: GestureDetector(
-          onTap: (){
-            _choiceGender(gender);
-          },
-          child: ColorFiltered(
-            colorFilter: this.gender == gender ? identity : greyscale,
-            child: CircleAvatar(
-              radius: 35.0,
-              // backgroundImage: AssetImage('assets/images/male-selected.png'),
-              backgroundImage: image,
-            ),
+    return AnimatedContainer(
+      duration: Duration(milliseconds: 90),
+      decoration: BoxDecoration(
+        gradient: this.gender == gender ? LinearGradient(
+          colors: [
+            Color(0xFF7A00EE),
+            Color(0xFF8B30F1),
+            Color(0xFFBE20E7),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ) : null,
+        borderRadius: BorderRadius.circular(50.0),
+      ),
+      padding: EdgeInsets.all(10.0),
+      child: GestureDetector(
+        onTap: (){
+          _choiceGender(gender);
+        },
+        child: ColorFiltered(
+          colorFilter: this.gender == gender ? identity : greyscale,
+          child: CircleAvatar(
+            radius: 35.0,
+            backgroundImage: image,
           ),
         ),
       ),

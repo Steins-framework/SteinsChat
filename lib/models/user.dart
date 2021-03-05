@@ -1,3 +1,5 @@
+import 'dart:ffi';
+
 import 'package:json_annotation/json_annotation.dart';
 
 @JsonSerializable(nullable: false)
@@ -6,12 +8,16 @@ class User {
   final int sex;
   final String name;
   final String avatar;
+  final List<double> coordinate;
+  final List<String> tags;
 
   User({
     this.id,
     this.sex,
     this.name,
     this.avatar,
+    this.coordinate,
+    this.tags,
   });
 
   factory User.fromJson(Map<String, dynamic> json){

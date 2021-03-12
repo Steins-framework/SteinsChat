@@ -1,7 +1,10 @@
+import 'package:chat/models/user.dart';
 import 'package:chat/screen/chat_screen.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'dart:io';
+
+import 'package:uuid/uuid.dart';
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -30,23 +33,26 @@ class _HomeScreenState extends State<HomeScreen> {
   static const int MAN = 0;
   static const int FEMALE = 1;
 
-  int gender = 4;
+  User currentUser = User(
+      id: Uuid().v4(),
+      name: Uuid().v4()
+  );
 
   void _jumpToChat(BuildContext context){
-    if (gender == 4){
+    if (currentUser.sex == 4){
       return;
     }
 
     Navigator.of(context).push(new MaterialPageRoute(builder: (context){
       return ChatScreen();
     }, settings: RouteSettings(arguments: {
-      'sex': gender
+      'user': currentUser
     })));
   }
 
   void _choiceGender(int gender){
     setState(() {
-      this.gender = gender;
+      this.currentUser.sex = gender;
     });
   }
 
@@ -54,7 +60,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return AnimatedContainer(
       duration: Duration(milliseconds: 90),
       decoration: BoxDecoration(
-        gradient: this.gender == gender ? LinearGradient(
+        gradient: currentUser.sex == gender ? LinearGradient(
           colors: [
             Color(0xFF7A00EE),
             Color(0xFF8B30F1),
@@ -71,12 +77,45 @@ class _HomeScreenState extends State<HomeScreen> {
           _choiceGender(gender);
         },
         child: ColorFiltered(
-          colorFilter: this.gender == gender ? identity : greyscale,
+          colorFilter: currentUser.sex == gender ? identity : greyscale,
           child: CircleAvatar(
             radius: 35.0,
             backgroundImage: image,
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _agePicker(BuildContext context){
+    return CupertinoActionSheet(
+      title: const Text('Chose your age'),
+      // message: const Text('Message'),
+      actions: [
+        CupertinoActionSheetAction(
+          child: const Text('Under 18'),
+          onPressed: (){
+            Navigator.of(context).pop(0);
+          },
+        ),
+        CupertinoActionSheetAction(
+          child: const Text('18 to 23 years old'),
+          onPressed: (){
+            Navigator.of(context).pop(1);
+          },
+        ),
+        CupertinoActionSheetAction(
+          child: const Text('Over 23 years old'),
+          onPressed: (){
+            Navigator.of(context).pop(2);
+          },
+        ),
+      ],
+      cancelButton: CupertinoActionSheetAction(
+        child: const Text('Cancel', style: TextStyle(color: Colors.red),),
+        onPressed: (){
+          Navigator.of(context).pop();
+        },
       ),
     );
   }
@@ -126,8 +165,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       color: Colors.white
                   ),
                 ),
-                onPressed: (){
-                  _jumpToChat(context);
+                onPressed: () async {
+                  await showCupertinoModalPopup(context: context, builder: _agePicker).then((value) {
+                    if(value == null) return;
+
+                    currentUser.age = value;
+                    _jumpToChat(context);
+                  });
                 },
               ),
             )

@@ -1,11 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-
+import 'package:chat/config.dart';
 import 'package:chat/models/unified_data_format.dart';
 import 'package:chat/net/json_decoder.dart';
-import 'package:device_info/device_info.dart';
-import 'package:flutter/material.dart';
 
 typedef void SocketEventCallback(dynamic);
 
@@ -16,7 +14,7 @@ class Net {
   static var _events = new Map<String, List<SocketEventCallback>>();
 
   static String status;
-  
+
   static int heartbeat = 5;
   static int _lastHeartbeatTime;
   static Timer heartbeatTask;
@@ -86,25 +84,13 @@ class Net {
   }
 
   static Future<Socket> connect() async {
-    String address = '10.0.2.2';
+    int port = Config.port;
+    return Config.getAddress().then((add) {
 
-    if (Platform.isWindows){
-      address = '127.0.0.1';
-    }
-    var device = DeviceInfoPlugin();
+      print("Connect to $add:$port");
 
-    var info = await device.androidInfo;
-
-    if(info.model == 'sdk_gphone_x86_arm'){
-      address = '10.0.2.2';
-    }else{
-      address = '192.168.3.117';
-    }
-    // address = 'chat.misakas.com';
-
-    print("Connect to $address:$Port");
-
-    return await Socket.connect(address, Port,timeout: Duration(seconds: 5));
+      return Socket.connect(add, port,timeout: Duration(seconds: 5));
+    });
   }
 
   static void socketWriteObject(String event,Object object) async{

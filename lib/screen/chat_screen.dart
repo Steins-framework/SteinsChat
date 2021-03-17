@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:chat/common/app_permission.dart';
 import 'package:chat/common/notification_bar.dart';
 import 'package:chat/component/bubble.dart';
+import 'package:chat/component/message_type_group.dart';
 import 'package:chat/models/message.dart';
 import 'package:chat/models/single_room.dart';
 import 'package:chat/models/user.dart';
@@ -19,10 +20,10 @@ class ChatScreen extends StatefulWidget {
   _ChatScreenState createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
+class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver, TickerProviderStateMixin {
   TextEditingController messageController = TextEditingController();
   ScrollController chatListController = ScrollController();
-  GlobalKey _inputGroupKey = GlobalKey();
+  GlobalKey _inputGroupKey = new GlobalKey();
   AppLifecycleState appLifecycleState = AppLifecycleState.resumed;
   List<Message> chatHistory = [];
   Timer messageStatusTimer;
@@ -30,6 +31,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   String chatStatus;
   User currentUser;
   SingleRoom room;
+  bool messageInputHasValue = false;
 
   Widget _buildMessageList(BuildContext context) {
     return Expanded(
@@ -86,35 +88,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         ),
       );
     }
-    return Container(
-      // color: Color(0xffe0e0e0),
-      child: Row(
-        key: _inputGroupKey,
-        children: [
-          TextButton(
-            child: Text(
-              chatStatus == 'chat' ? '离开' : '确认？',
-              style: TextStyle(color: Colors.grey),
-            ),
-            onPressed: () {
-              leave();
-            },
-          ),
-          Expanded(
-              child: TextField(
-            controller: messageController,
-            textInputAction: TextInputAction.send,
-            onEditingComplete: () {
-              sendMessage(context);
-            },
-          )),
-          IconButton(
-              icon: Icon(Icons.send),
-              onPressed: () {
-                sendMessage(context);
-              })
-        ],
-      ),
+    return MessageTypeGroup(
+      key: _inputGroupKey,
+      controller: messageController,
+      onLeave: (){
+        leave();
+      },
+      onEditingComplete: (){
+        sendMessage(context);
+      },
     );
   }
 
@@ -314,7 +296,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     _addMessageToChatList(message);
 
-    messageController.text = '';
+    messageController.clear();
   }
 
   @override
@@ -397,52 +379,52 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   void leave([Function(bool) func]) async {
     showDialog(
-        context: context,
-        builder: (context) {
-          return AlertDialog(
-            title: Text('确认离开吗?'),
-            content: Text(''),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('确认离开吗?'),
+          content: Text(''),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
 
-                  if (func != null) {
-                    func(false);
-                  }
-                },
-                child: Text(
-                  '取消',
-                  style: TextStyle(color: Color(0xFF6200EE)),
-                ),
+                if (func != null) {
+                  func(false);
+                }
+              },
+              child: Text(
+                '取消',
+                style: TextStyle(color: Color(0xFF6200EE)),
               ),
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
 
-                  messageStatusTimer?.cancel();
-                  Net.socketWriteObject('leave', null);
-                  setState(() {
-                    this.room = null;
-                  });
+                messageStatusTimer?.cancel();
+                Net.socketWriteObject('leave', null);
+                setState(() {
+                  this.room = null;
+                });
 
-                  if (func != null) {
-                    func(true);
-                  }
-                },
-                child: Text(
-                  '确认',
-                  style: TextStyle(color: Color(0xFF6200EE)),
-                ),
+                if (func != null) {
+                  func(true);
+                }
+              },
+              child: Text(
+                '确认',
+                style: TextStyle(color: Color(0xFF6200EE)),
               ),
-            ],
-          );
-        });
+            ),
+          ],
+        );
+      },);
   }
 
   void registerUser() async {
     var arguments =
-        ModalRoute.of(context).settings.arguments as Map<String, User>;
+    ModalRoute.of(context).settings.arguments as Map<String, User>;
 
     if (currentUser == null) {
       currentUser = arguments['user'];
@@ -461,39 +443,41 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         chatListController.position.maxScrollExtent -
         2;
 
-    chatListController.animateTo(jumpTo,
-        duration: Duration(milliseconds: 500), curve: Curves.ease);
+    if(chatListController.position.maxScrollExtent != 0){
+      chatListController.animateTo(jumpTo,
+          duration: Duration(milliseconds: 500), curve: Curves.ease);
+    }
   }
 
   void startMessageStatusTimer() {
     messageStatusTimer =
         Timer.periodic(Duration(seconds: maximumMessageDelay), (timer) {
-      if (chatStatus != 'chat') {
-        messageStatusTimer?.cancel();
-        return;
-      }
+          if (chatStatus != 'chat') {
+            messageStatusTimer?.cancel();
+            return;
+          }
 
-      int unixTime = DateTime.now().millisecondsSinceEpoch;
-      bool changed = false;
+          int unixTime = DateTime.now().millisecondsSinceEpoch;
+          bool changed = false;
 
-      for (int i = chatHistory.length - 1; i > -1; i--) {
-        var message = chatHistory[i];
-        if (message.sender.id != currentUser.id) {
-          return;
-        }
-        if (message.status == 0 &&
-            unixTime - message.time > maximumMessageDelay * 1000) {
-          message.status = 3;
-          changed = true;
-        }
-      }
+          for (int i = chatHistory.length - 1; i > -1; i--) {
+            var message = chatHistory[i];
+            if (message.sender.id != currentUser.id) {
+              return;
+            }
+            if (message.status == 0 &&
+                unixTime - message.time > maximumMessageDelay * 1000) {
+              message.status = 3;
+              changed = true;
+            }
+          }
 
-      if (changed) {
-        setState(() {
-          //
+          if (changed) {
+            setState(() {
+              //
+            });
+          }
         });
-      }
-    });
   }
 
   void requestPermission() async {
